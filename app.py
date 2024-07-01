@@ -6,6 +6,14 @@ from image_processing import ImageProcessor
 from contour_detection import ContourDetector
 import cv2
 
+# Initialize or reset masks and operations log
+if 'remove_mask' not in st.session_state:
+    st.session_state.remove_mask = None
+if 'include_mask' not in st.session_state:
+    st.session_state.include_mask = None
+if 'operations' not in st.session_state:
+    st.session_state.operations = []
+
 # Streamlit UI
 st.title('Bottle Segmentation App')
 
@@ -29,23 +37,39 @@ if uploaded_file is not None:
     image_processor = ImageProcessor(input_image, binary_threshold)
     image, binary = image_processor.process_image()
 
-    # Display the binary image
-    st.subheader('Binary Image')
-    st.image(binary, caption='Binary Image', use_column_width=True)
+    # Initialize masks if they are None
+    if st.session_state.remove_mask is None:
+        st.session_state.remove_mask = np.zeros_like(binary, dtype=np.uint8)
+    if st.session_state.include_mask is None:
+        st.session_state.include_mask = np.zeros_like(binary, dtype=np.uint8)
+
+    # Apply operations in the order they were performed
+    current_binary = binary.copy()
+    for operation in st.session_state.operations:
+        if operation['mode'] == 'Remove':
+            mask = cv2.bitwise_not(operation['mask'])
+            current_binary = cv2.bitwise_and(current_binary, mask)
+        elif operation['mode'] == 'Include':
+            current_binary = cv2.bitwise_or(current_binary, operation['mask'])
+
+    # # Display the binary image
+    # st.subheader('Binary Image')
+    # st.image(current_binary, caption='Binary Image', use_column_width=True)
 
     # Add canvas for editing binary image
     st.subheader('Edit Binary Image')
+    brush_color = "black" if selection_mode == 'Remove' else "white"
+
     canvas_result = st_canvas(
         fill_color="rgba(0, 0, 0, 1)",  # Fixed fill color with some opacity
         stroke_width=brush_size,
-        stroke_color="black",
-        background_color="white",
-        background_image=Image.fromarray(binary),
+        stroke_color=brush_color,
+        background_image=Image.fromarray(current_binary),
         update_streamlit=True,
-        height=binary.shape[0],
-        width=binary.shape[1],
+        height=current_binary.shape[0],
+        width=current_binary.shape[1],
         drawing_mode="freedraw",
-        key="canvas",
+        key="canvas_" + selection_mode,
     )
 
     if canvas_result.image_data is not None:
@@ -56,16 +80,27 @@ if uploaded_file is not None:
         alpha_channel = canvas_image[:, :, 3]
         brush_strokes = cv2.threshold(alpha_channel, 127, 255, cv2.THRESH_BINARY)[1]
 
-        # Depending on selection mode, apply/remove brush strokes
+        # Update the corresponding mask and log the operation
         if selection_mode == 'Remove':
-            # Invert brush strokes (areas to be removed)
-            brush_strokes_inv = cv2.bitwise_not(brush_strokes)
-            edited_binary = cv2.bitwise_and(binary, brush_strokes_inv)
+            st.session_state.remove_mask = cv2.bitwise_or(st.session_state.remove_mask, brush_strokes)
+            st.session_state.operations.append({'mode': 'Remove', 'mask': brush_strokes})
         elif selection_mode == 'Include':
-            edited_binary = cv2.bitwise_or(binary, brush_strokes)
+            st.session_state.include_mask = cv2.bitwise_or(st.session_state.include_mask, brush_strokes)
+            st.session_state.operations.append({'mode': 'Include', 'mask': brush_strokes})
+
+    # Add a button to process contours
+    if st.button('Process Contours'):
+        # Apply operations in the order they were performed
+        final_binary = binary.copy()
+        for operation in st.session_state.operations:
+            if operation['mode'] == 'Remove':
+                mask = cv2.bitwise_not(operation['mask'])
+                final_binary = cv2.bitwise_and(final_binary, mask)
+            elif operation['mode'] == 'Include':
+                final_binary = cv2.bitwise_or(final_binary, operation['mask'])
 
         # Find and draw contours on the edited binary image
-        contour_detector = ContourDetector(image, edited_binary, epsilon)
+        contour_detector = ContourDetector(image, final_binary, epsilon)
         segmented, output = contour_detector.find_and_draw_contours()
 
         # Display output
