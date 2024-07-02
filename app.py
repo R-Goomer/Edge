@@ -4,6 +4,7 @@ from PIL import Image
 from streamlit_drawable_canvas import st_canvas
 from image_processing import ImageProcessor
 from contour_detection import ContourDetector
+from G_Code_Generation import GCodeGenerator
 import cv2
 
 # Initialize or reset masks and operations log
@@ -27,7 +28,7 @@ if uploaded_file is not None:
     # Sidebar for parameters
     st.sidebar.subheader('Parameters')
     binary_threshold = st.sidebar.slider('Binary Threshold', 150, 255, 240, 2)
-    epsilon = st.sidebar.slider('Epsilon', 0.001, 0.05, 0.002, 0.001, format="%.3f")
+    epsilon = st.sidebar.slider('Epsilon', 0.001, 0.01, 0.002, 0.001, format="%.3f")
     brush_size = st.sidebar.slider('Brush Size', 1, 50, 10, 1)
 
     # Remove and Include selection buttons
@@ -101,7 +102,8 @@ if uploaded_file is not None:
 
         # Find and draw contours on the edited binary image
         contour_detector = ContourDetector(image, final_binary, epsilon)
-        segmented, output = contour_detector.find_and_draw_contours()
+        segmented, output, contours = contour_detector.find_and_draw_contours()
+        GCodeGenerator().generate_from_contours(contours)
 
         # Display output
         st.subheader('Segmented Bottles')

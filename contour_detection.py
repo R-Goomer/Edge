@@ -35,6 +35,6 @@ class ContourDetector:
         # Draw the approximated contours on the original image
         output = self.image.copy()
         for approx in approx_contours:
-            cv2.drawContours(output, [approx], -1, (0, 255, 0), 3)
+            cv2.drawContours(output, [approx], -1, (0, 255, 0), 1)
 
-        return segmented, output
+        return segmented, output, approx_contours
