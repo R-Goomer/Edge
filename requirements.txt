@@ -1,0 +1,6 @@
+streamlit-drawable-canvas
+localtunnel
+streamlit
+numpy
+Pillow
+opencv-python
